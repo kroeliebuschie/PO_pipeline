@@ -21,8 +21,14 @@ The "xtra profit cmd" can be for example "ALIGN WHOLE" which would first align t
 
 The iprofit scripts needs an additional positions.txt as argument. These scripts calculate the RMS over only the binding pocket residues. The difference between 
 `make_iprofit_fit_script.sh` and `make_iprofit_script.sh` is that latter one does not superimpose the structures prior to RMS calculation.
+
 ```bash
-make_iprofit_script.sh reference.pdb mobiles_folder/ positions.txt > BR_original_iprofit_script.txt
+make_iprofit_script.sh reference.pdb mobiles_folder/ positions.txt > iprofit_script.txt
+```
+
+before preceding to the next step it might be good to perform this to the profit output:
+```bash
+grep -A1 "##" results.txt > results_grepped.txt
 ```
 
 The R script takes the profit output textfiles as arguments and returns a pdf file with the plot.

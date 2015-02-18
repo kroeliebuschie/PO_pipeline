@@ -5,7 +5,7 @@ IND=$( cat $3 | sed -n -e 's/^index = //p' )
 
 
 echo "reference $1"
-FILES=${2}/*
+FILES=${2}/*.pdb
 for f in $FILES ; do
     echo "mobile $f"
     echo "QUIET ON"

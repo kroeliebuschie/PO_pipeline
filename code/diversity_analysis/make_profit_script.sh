@@ -2,7 +2,7 @@
 ## script which generates profit script
 
 echo "reference $1"
-FILES=${2}/*
+FILES=${2}/*.pdb
 for f in $FILES ; do
     echo "mobile $f"
     echo "ATOMS CA"
