@@ -14,6 +14,7 @@ import tempfile
 import subprocess
 import glob
 import itertools
+import multiprocessing as mp
 # uncomment if can
 #from py.Common.MiscTools import expand_path
 
@@ -93,7 +94,7 @@ def iRMS(positions, ref_pdb, mob_pdb, fit):
     
     return txt
 
-def ProFit(ref_pdb, mob_pdb, fit, positions):
+def ProFit(ref_pdb, mob_pdb, fit, positions, n, output):
     '''Function which runs profit with the pdbs given and checks weather 
        they should be fit prior to iRMS calculations'''
     # first make the txt file then create it as a tmp file and then run profit
@@ -114,7 +115,9 @@ def ProFit(ref_pdb, mob_pdb, fit, positions):
                 rms = re.sub('RMS: ', '', rms)
                 rms = float(rms)
                 break
-    return rms
+    #return rms
+    output.put((n, rms))
+
 
 def main( command_line):
     '''Run everything'''
@@ -153,20 +156,72 @@ def main( command_line):
     assert k == ['chain', 'index', 'mutations'], 'the position file ' + args.position_file.name + ' has invalid syntax.' 
     params['mutations'] = params['mutations'].split() 
     positions.append(params) 
+   
+    # remove this
+    full = False
+    if full:
+        ## Start parallel processing here
+        # make combinations of 2
+        it_pdb = [ comb for comb in itertools.combinations(pdb_files, 2)]
+        # make an output queue  
+        output = mp.Queue()
     
-    # create lists
-    df = {'pdb_list_0': pdb_files, 'pdb_list_1': [], 'pdb_list_2': [], 'rmsd' : []}
+       # Setup a list of processes that we want to run
+        processes = [mp.Process(target=ProFit, args=(x[0],x[1], args.fit, positions, n, output)) for n, x in enumerate(it_pdb)]
+    
+        # Run processes
+        for p in processes:
+            p.start()
+        # Exit the completed processes
+        for p in processes:
+            p.join()
+        
+        # get the result from the processes 
+        results = [output.get() for p in processes]
+        results.sort()
+        results = [r[1] for r in results]
+    
+        # Write away everything
+        df = {'pdb_list_0': pdb_files, 'rmsd' : results}
+        with open('distance_matrix.json', 'w') as json_f: 
+            json_f.write(json.dumps(df))
+            json_f.close()
+    else:
+        # Make a list which contains all pdb's which have not been assigned a cluster
+        unclustered = [ (u,n) for n, u in enumerate(pdb_files) ] 
+        clusters = []
+        f = open('RosettaBackrubClusterMediods.txt', 'w')
 
-    # make combinations of 2
-    it_pdb = itertools.combinations(pdb_files, 2)
-    for comb in it_pdb:
-        df['pdb_list_1'].append(comb[0])
-        df['pdb_list_2'].append(comb[1])
-        df['rmsd'].append(ProFit(comb[0], comb[1], args.fit, positions))
-    # write json file
-    with open('distance_matrix.json', 'w') as json_f: 
-        json_f.write(json.dumps(df))
-        json_f.close()
+        # make an output queue  
+        while len(unclustered) > 0:
+            output = mp.Queue()
+
+            # Setup a list of processes that we want to run
+            processes = [mp.Process(target=ProFit, args=(unclustered[0][0], x, args.fit, positions, n, output)) for x, n in unclustered]
+             
+            # Run processes
+            for p in processes:
+                p.start()
+            # Exit the completed processes
+            for p in processes:
+                p.join()
+            
+            # Eliminate within threshold
+            results     = [ output.get() for p in processes ]
+            cluster     = [ el[0] for el in results if el[1] < 0.2 ]
+            medion      = [ el[0] for el in results if el[1] == 0.0 ]
+
+            clusters.append(cluster)
+            f.write(pdb_files[medion[0]] + '\n')
+            
+            unclustered = [ el for el in unclustered if el[1] not in cluster ] 
+        f.close
+ 
+        for n, clu in enumerate(clusters):
+            print 'cluster ' + str(n+1) + ' contains:'
+            for el in clu:
+                print pdb_files[el]
+
 
 if __name__ == "__main__":
     main( sys.argv[1:])
